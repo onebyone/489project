@@ -1,10 +1,13 @@
 #include<stdio.h>
 #include<stdlib.h>
 #include<string.h>
-#include"stdafx.h"
 #include<cstring>
 
+#define pieceSize (4096*1024)
+
 using namespace std;
+
+void gethash(unsigned char* input,char* hash);
 
 int main(int argc, char *argv[]){
 
@@ -37,7 +40,7 @@ int main(int argc, char *argv[]){
   	rewind (fd);
 
 
-	long part_num = size / 4194303 + (size % 4194303 != 0);
+	long part_num = size / pieceSize + (size % pieceSize != 0);
 
 	char size_str[256];
 	char part_str[256];
@@ -53,10 +56,10 @@ int main(int argc, char *argv[]){
 
 
 	for (int i=0; i<part_num; i++) {
-		if (i==part_num-1 && (size % 4194303))
-			fread (buff,1,size % 4194303, fd);
+		if (i==part_num-1 && (size % pieceSize))
+			fread (buff,1,size % pieceSize, fd);
 		else
-			fread (buff,1,4194303,fd);
+			fread (buff,1, pieceSize,fd);
 		char hash[255];
 		gethash(buff,hash);
 		char hash_str[256];
