@@ -1,0 +1,310 @@
+#include <netinet/in.h>    // for sockaddr_in
+#include <sys/types.h>    // for socket
+#include <sys/socket.h>    // for socket
+#include <stdio.h>        // for printf
+#include <stdlib.h>        // for exit
+#include <string.h>        // for bzero
+
+
+#include <errno.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#include <string>
+
+#include <iostream>
+#include <fstream>
+#include <pthread.h>
+#include <thread>
+#include <mutex>
+#include <vector>
+/*
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+*/
+
+using namespace std;
+#define HELLO_WORLD_SERVER_PORT    6666
+#define LENGTH_OF_LISTEN_QUEUE  20
+#define BUFFER_SIZE 1024
+#define FILE_NAME_MAX_SIZE 256
+#define TORRENT_LIST "torrent_list"
+#define MAX_CONNECTIONS 512
+
+mutex torrent_file, threads_stats;
+
+
+int send_file(char* file_name, int receiver_socket);
+int receive_file(char* file_name, int receiver_socket, long file_size);
+long get_file_size(char* file_name);
+void update_generate_torrent_list(char* file_name, long file_size);
+int get_free_thread_id();
+
+struct thread_data_t{
+   int thread_id;
+   int socket;
+};
+bool thread_used[MAX_CONNECTIONS];
+pthread_t thread_pool[MAX_CONNECTIONS];
+
+void *process_client(void *thread_data_ptr_arg)
+{
+    thread_data_t* thread_data_ptr= (thread_data_t*) thread_data_ptr_arg;
+    thread_data_t thread_data = *thread_data_ptr;
+
+    int new_server_socket = thread_data.socket;
+    int thread_id = thread_data.thread_id;
+
+    cout << "Thread " << thread_id << " is running\n";
+
+    char buffer[BUFFER_SIZE];
+    bzero(buffer, BUFFER_SIZE);
+
+    while (1)
+    {
+        cout << "Listen to the client" << endl;
+        int length = recv(new_server_socket,buffer,BUFFER_SIZE,0);
+        if (length < 0)
+        {
+            printf("Server Recieve Data Failed!\n");
+            break;
+        }
+    
+        char command[10];
+        char file_name[FILE_NAME_MAX_SIZE];
+        long file_size;
+        int index = 0;
+        memcpy(command, buffer, 10);
+        index += 10;
+
+        memcpy(file_name, buffer + index, FILE_NAME_MAX_SIZE);
+        index += FILE_NAME_MAX_SIZE;
+
+        memcpy(&file_size, buffer + index, sizeof(file_size));   
+        
+        if (0 == strcmp(command, "send") )
+        {
+	        cout << "The command is " << command << endl;
+        	cout << "File name is " << file_name << endl;
+        	cout << "File size is " << file_size << endl;
+
+            receive_file(file_name, new_server_socket, file_size);
+            cout << "Finish receiving" << endl;
+            update_generate_torrent_list(file_name, file_size);
+        }
+        else if (0 == strcmp(command, "request"))
+        {
+	        cout << "The command is " << command << endl;
+            cout << "Going to send file " << file_name << endl;
+            //get_file_size
+    		file_size = get_file_size(file_name);
+    		memcpy(buffer + index, &file_size, sizeof(file_size));
+    		printf("Send file size :%ld", file_size);
+    		send(new_server_socket, buffer, BUFFER_SIZE, 0);
+            send_file(file_name, new_server_socket);
+    		cout << "Finish sending" << endl;
+        }
+        else if (0 == strcmp(command, "update"))
+        {
+            cout << "The command is " << command << endl;
+            cout << "Going to update peer list of file " << file_name << endl;
+            //get_file_size
+            file_size = get_file_size(file_name);
+            memcpy(buffer + index, &file_size, sizeof(file_size));
+            printf("Send file size :%ld", file_size);
+            send(new_server_socket, buffer, BUFFER_SIZE, 0);
+            send_file(file_name, new_server_socket);
+            cout << "Finish sending" << endl;
+        }
+        else
+        {
+            close(new_server_socket);
+            break;
+        }
+        bzero(buffer, BUFFER_SIZE);
+    }
+    cout << "Thread " << thread_id << " finish\n";
+    threads_stats.lock();
+    thread_used[thread_id] = false;
+    threads_stats.unlock();
+
+}
+
+int main(int argc, char **argv)
+{
+    struct sockaddr_in server_addr;
+    bzero(&server_addr,sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = htons(INADDR_ANY);
+    server_addr.sin_port = htons(HELLO_WORLD_SERVER_PORT);
+
+    int server_socket = socket(PF_INET,SOCK_STREAM,0);
+    if( server_socket < 0)
+    {
+        printf("Create Socket Failed!");
+        exit(1);
+    }
+
+
+    if( bind(server_socket,(struct sockaddr*)&server_addr,sizeof(server_addr)))
+    {
+        printf("Server Bind Port : %d Failed!", HELLO_WORLD_SERVER_PORT);
+        exit(1);
+    }
+
+    if ( listen(server_socket, LENGTH_OF_LISTEN_QUEUE) )
+    {
+        printf("Server Listen Failed!");
+        exit(1);
+    }
+
+
+    
+
+    fill_n(thread_used, MAX_CONNECTIONS, false);
+
+    while (1) 
+    {
+	    printf("in the loop listening.....\n");
+
+        struct sockaddr_in client_addr;
+        socklen_t length = sizeof(client_addr);
+        int new_server_socket = accept(server_socket,(struct sockaddr*)&client_addr,&length);
+
+        if ( new_server_socket < 0)
+        {
+            printf("Server Accept Failed!\n");
+            break;
+        }
+        int thread_id = get_free_thread_id();
+        if (thread_id == MAX_CONNECTIONS)
+        {
+            cout << "Server is busy\n";
+            close(new_server_socket);
+            continue;
+        }
+        
+
+        thread_data_t thread_data;
+        thread_data.thread_id = thread_id;
+        thread_data.socket = new_server_socket;
+
+        int rc = pthread_create(&thread_pool[0], NULL, 
+                          process_client, (void *)&thread_data);
+        threads_stats.lock();
+        thread_used[thread_id] = true;
+        threads_stats.unlock();
+        
+    }
+
+    return 0;
+}
+
+int send_file(char* file_name, int receiver_socket)
+{
+    FILE * fp = fopen(file_name,"r");
+    char buffer[BUFFER_SIZE];
+    if(NULL == fp )
+    {
+        printf("File:\t%s Not Found\n", file_name);
+    }
+    else
+    {
+        bzero(buffer, BUFFER_SIZE);
+        int file_block_length = 0;
+
+        while( (file_block_length = fread(buffer,sizeof(char),BUFFER_SIZE,fp))>0)
+        {
+            printf("file_block_length = %d\n",file_block_length);
+
+            if(send(receiver_socket,buffer,file_block_length,0)<0)
+            {
+                printf("Send File:\t%s Failed\n", file_name);
+                break;
+            }
+            bzero(buffer, BUFFER_SIZE);
+        }             
+        fclose(fp);
+        printf("File:\t%s Transfer Finished\n",file_name);
+    }
+}
+
+int receive_file(char* file_name, int receiver_socket, long file_size)
+{
+    cout << "In receive_file " << file_name << endl;
+    FILE * fp = fopen(file_name,"w");
+    if(NULL == fp )
+    {
+        printf("File:\t%s Can Not Open To Write\n", file_name);
+        exit(1);
+    }
+    
+
+    char buffer[BUFFER_SIZE];
+    bzero(buffer,BUFFER_SIZE);
+    int length = 0;
+    while( file_size > 0)   
+    {
+        length = recv(receiver_socket,buffer,BUFFER_SIZE,0);
+        if(length < 0)
+        {
+            cout << "Recieve Data From Server Failed!\n";
+            break;
+        }
+        int write_length = fwrite(buffer,sizeof(char),length,fp);
+        if (write_length<length)
+        {
+            printf("File:\t%s Write Failed\n", file_name);
+            break;
+        }
+        bzero(buffer,BUFFER_SIZE);  
+        file_size -=  length;
+    }
+    cout << "Recieve File:\t "<<file_name<<" From client Finished\n";
+    
+    fclose(fp);
+}
+
+long get_file_size(char* file_name)
+{
+    cout << "in get size" << endl;
+    FILE * fp = fopen(file_name,"r");
+    fseek (fp, 0, SEEK_END);
+    long file_size_long = ftell (fp);
+    fclose(fp);
+
+    return file_size_long;
+}
+
+
+
+void update_generate_torrent_list(char* file_name, long file_size)
+{
+    ofstream outfile;
+
+    torrent_file.lock();
+
+    outfile.open(TORRENT_LIST, ios_base::app);
+    outfile << file_name << " size: " << file_size << '\n'; 
+    outfile.close();
+    torrent_file.unlock();
+    cout << "File " << file_name << " added to torrent list.\n";
+}
+
+int get_free_thread_id()
+{
+    threads_stats.lock();
+    int i = 0;
+    for (; i < MAX_CONNECTIONS; i++)
+    {
+        if (!thread_used[i])
+        {
+            break;
+        }
+    }
+    threads_stats.unlock();
+    return i;
+}
