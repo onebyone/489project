@@ -15,6 +15,7 @@
 
 #include <iostream>
 #include <fstream>
+#include <sstream>
 #include <pthread.h>
 #include <thread>
 #include <mutex>
@@ -33,8 +34,11 @@ using namespace std;
 #define FILE_NAME_MAX_SIZE 256
 #define TORRENT_LIST "torrent_list"
 #define MAX_CONNECTIONS 512
+#define PEER_INFO_LEN 512
+#define MAX_FILE 512
 
 mutex torrent_file, threads_stats;
+mutex peer_list_lock[MAX_FILE];
 
 
 int send_file(char* file_name, int receiver_socket);
@@ -42,10 +46,13 @@ int receive_file(char* file_name, int receiver_socket, long file_size);
 long get_file_size(char* file_name);
 void update_generate_torrent_list(char* file_name, long file_size);
 int get_free_thread_id();
+void update_peerlist(char* file_name, string ip, string piece_info);
 
 struct thread_data_t{
    int thread_id;
    int socket;
+   string ip;
+   int port;
 };
 bool thread_used[MAX_CONNECTIONS];
 pthread_t thread_pool[MAX_CONNECTIONS];
@@ -83,7 +90,7 @@ void *process_client(void *thread_data_ptr_arg)
         memcpy(file_name, buffer + index, FILE_NAME_MAX_SIZE);
         index += FILE_NAME_MAX_SIZE;
 
-        memcpy(&file_size, buffer + index, sizeof(file_size));   
+        //memcpy(&file_size, buffer + index, sizeof(file_size));   
         
         if (0 == strcmp(command, "send") )
         {
@@ -91,6 +98,7 @@ void *process_client(void *thread_data_ptr_arg)
         	cout << "File name is " << file_name << endl;
         	cout << "File size is " << file_size << endl;
 
+            memcpy(&file_size, buffer + index, sizeof(file_size)); 
             receive_file(file_name, new_server_socket, file_size);
             cout << "Finish receiving" << endl;
             update_generate_torrent_list(file_name, file_size);
@@ -100,24 +108,20 @@ void *process_client(void *thread_data_ptr_arg)
 	        cout << "The command is " << command << endl;
             cout << "Going to send file " << file_name << endl;
             //get_file_size
+            //TODO big change
     		file_size = get_file_size(file_name);
     		memcpy(buffer + index, &file_size, sizeof(file_size));
     		printf("Send file size :%ld", file_size);
-    		send(new_server_socket, buffer, BUFFER_SIZE, 0);
-            send_file(file_name, new_server_socket);
-    		cout << "Finish sending" << endl;
+    		
         }
         else if (0 == strcmp(command, "update"))
         {
             cout << "The command is " << command << endl;
             cout << "Going to update peer list of file " << file_name << endl;
-            //get_file_size
-            file_size = get_file_size(file_name);
-            memcpy(buffer + index, &file_size, sizeof(file_size));
-            printf("Send file size :%ld", file_size);
-            send(new_server_socket, buffer, BUFFER_SIZE, 0);
-            send_file(file_name, new_server_socket);
-            cout << "Finish sending" << endl;
+            
+            char peer_info[PEER_INFO_LEN];
+            memcpy(peer_info, buffer + index, PEER_INFO_LEN); 
+            update_peerlist(file_name, thread_data.ip, string(peer_info));
         }
         else
         {
@@ -191,6 +195,8 @@ int main(int argc, char **argv)
         thread_data_t thread_data;
         thread_data.thread_id = thread_id;
         thread_data.socket = new_server_socket;
+        thread_data.ip = string(inet_ntoa(client_addr.sin_addr));
+        thread_data.port = (int) ntohs(client_addr.sin_port);
 
         int rc = pthread_create(&thread_pool[0], NULL, 
                           process_client, (void *)&thread_data);
@@ -307,4 +313,45 @@ int get_free_thread_id()
     }
     threads_stats.unlock();
     return i;
+}
+
+//TODO test needed
+//TODO lock of update peerlist need to be added
+void update_peerlist(char* file_name, string ip, string piece_info)
+{
+    string peer_list = string(file_name) + ".peer_list";
+    string temp_list = peer_list + ".temp";
+
+    ifstream read_list(peer_list);
+    ofstream write_list(temp_list);
+
+    if (read_list)
+    {
+        string line, ip_temp, new_peer_info;
+        int line_num = 0;
+        while (getline(read_list, line))
+        {
+            istringstream line_stream;
+            line_stream.str(line);
+
+            line_stream >> ip_temp;
+            if (0 == ip.compare(ip_temp))
+            {
+                line_stream >> new_peer_info;
+
+                line = ip + " " + piece_info;
+            }
+            write_list << line + "\n";
+        }
+        read_list.close();
+        remove(peer_list.c_str());
+    }
+    else
+    {
+        write_list << ip + " " + piece_info + "\n";
+    }
+    write_list.close();
+    rename(temp_list.c_str(), peer_list.c_str());
+
+
 }
