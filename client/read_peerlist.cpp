@@ -3,6 +3,7 @@
 #include <string>
 #include <fstream>
 #include <vector>
+#include <cstdlib>
 using namespace std;
 
 bool have_piece(string bitmap, int piece_num);
@@ -26,6 +27,10 @@ string shit = choose_peer(4, "peerlist.txt");
 	cout<<v.size()<<endl;
 	int temp = v.back();
 	v.pop_back();
+	srand( (unsigned)time(NULL)); //生成种子
+	int gaoshenme;
+	gaoshenme = rand()%8;
+	cout<<"random number is"<<gaoshenme<<endl;
 	cout<<"size is "<<v.size()<<endl;
 	cout<<"num is "<< temp<<endl;
 
@@ -82,6 +87,7 @@ string choose_peer(int piece_num,  string peerlist_file)
 {
 //	ifstream file_in(peerlist_file);
 	ifstream file_in(peerlist_file.c_str());
+	vector<string> ipvec;
 	if(file_in == NULL)
 		cout<<"No File Found"<<endl;
 	string ip;
@@ -90,9 +96,19 @@ string choose_peer(int piece_num,  string peerlist_file)
 	{
 		cout<<ip<<" "<<bitmap<<endl;
 		if( have_piece( bitmap , piece_num ) )
-			return ip;
+		{
+			ipvec.push_back(ip);
+		}
 	}
-	return "No Piece Found";
+	if(ipvec.size() <= 0)
+		return "No Piece Found";
+	else
+	{
+		srand( (unsigned)time(NULL)); //生成种子
+		int index;
+		index = rand()%(ipvec.size()) ;
+		return ipvec[index];
+	}
 }
 
 //small piece
