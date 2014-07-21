@@ -16,7 +16,7 @@ int main(int argc, char *argv[]){
 	long size;
 	char file_name[256];
 	char tracker_name[256];
-	unsigned char buff[4194304];		
+	unsigned char buff[pieceSize];		
 
 	if (argc <3) {fputs ("Too few arguments",stderr); exit (1);}
 	else {
@@ -32,7 +32,7 @@ int main(int argc, char *argv[]){
 	fd = fopen(file_name,"r");
 	if (fd==NULL) {fputs ("File error\n",stderr); exit (1);}
 	ftorrent=fopen(torrent_name,"w");
-	if (ftorrent==NULL) {fputs ("File error2\n",stderr); exit (1);}
+	if (ftorrent==NULL) {fputs ("File error\n",stderr); exit (1);}
 
 	// obtain file size
 	fseek (fd , 0 , SEEK_END);
