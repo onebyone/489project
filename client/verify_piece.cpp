@@ -1,11 +1,8 @@
 #include<stdio.h>
 #include<stdlib.h>
-#include<string.h>
 #include<cstring>
 
 #define pieceSize (4096*1024)
-
-using namespace std;
 
 void gethash(unsigned char* input,char* hash);
 
@@ -26,6 +23,7 @@ int verify_piece(char* torrent_addr, char* piece_addr, long piece_num){
 	// obtain file size
 	fseek (fd , 0 , SEEK_END);
   	size = ftell (fd);
+	if (size==pieceSize+1) size--;
   	rewind (fd);
 	
 	// verify hash code
@@ -37,6 +35,9 @@ int verify_piece(char* torrent_addr, char* piece_addr, long piece_num){
 	*strrchr(hash_c, '\n')='\0';
 	fread(buff, 1, size, fd);
 	gethash(buff,hash_g);
+	
+	fclose(fd);
+	fclose(ftorrent);
 
 	return !strcmp(hash_c,hash_g);
 }

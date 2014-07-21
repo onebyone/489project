@@ -27,7 +27,7 @@ int verify_piece(char* torrent_addr, char* piece_addr, long piece_num){
 	fseek (fd , 0 , SEEK_END);
   	size = ftell (fd);
   	rewind (fd);
-	
+	if (size==pieceSize+1) size--;
 
 	char hash_c[255];
 	char hash_g[255];
