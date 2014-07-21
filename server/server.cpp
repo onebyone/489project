@@ -198,7 +198,7 @@ int main(int argc, char **argv)
         thread_data.ip = string(inet_ntoa(client_addr.sin_addr));
         thread_data.port = (int) ntohs(client_addr.sin_port);
 
-        int rc = pthread_create(&thread_pool[0], NULL, 
+        int rc = pthread_create(&thread_pool[thread_id], NULL, 
                           process_client, (void *)&thread_data);
         threads_stats.lock();
         thread_used[thread_id] = true;
