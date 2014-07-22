@@ -36,6 +36,7 @@ using namespace std;
 #define MAX_CONNECTIONS 512
 #define PEER_INFO_LEN 512
 #define MAX_FILE 512
+#define MAX_COMMAND_LEN 20
 
 mutex torrent_file, threads_stats;
 mutex peer_list_lock[MAX_FILE];
@@ -47,6 +48,7 @@ long get_file_size(char* file_name);
 void update_generate_torrent_list(char* file_name, long file_size);
 int get_free_thread_id();
 void update_peerlist(char* file_name, string ip, string piece_info);
+string generate_piece_info(long size);
 
 struct thread_data_t{
    int thread_id;
@@ -56,17 +58,15 @@ struct thread_data_t{
 };
 bool thread_used[MAX_CONNECTIONS];
 pthread_t thread_pool[MAX_CONNECTIONS];
+thread_data_t thread_args[MAX_CONNECTIONS];
 
 void *process_client(void *thread_data_ptr_arg)
 {
-    thread_data_t* thread_data_ptr= (thread_data_t*) thread_data_ptr_arg;
-    thread_data_t thread_data = *thread_data_ptr;
+    //thread_data_t* thread_data_ptr= (thread_data_t*) thread_data_ptr_arg;
+    thread_data_t thread_data = *(thread_data_t*) thread_data_ptr_arg;
 
     int new_server_socket = thread_data.socket;
     int thread_id = thread_data.thread_id;
-
-    cout << "Thread " << thread_id << " is running\n";
-
     char buffer[BUFFER_SIZE];
     bzero(buffer, BUFFER_SIZE);
 
@@ -80,12 +80,12 @@ void *process_client(void *thread_data_ptr_arg)
             break;
         }
     
-        char command[10];
+        char command[MAX_COMMAND_LEN];
         char file_name[FILE_NAME_MAX_SIZE];
         long file_size;
         int index = 0;
-        memcpy(command, buffer, 10);
-        index += 10;
+        memcpy(command, buffer, MAX_COMMAND_LEN);
+        index += MAX_COMMAND_LEN;
 
         memcpy(file_name, buffer + index, FILE_NAME_MAX_SIZE);
         index += FILE_NAME_MAX_SIZE;
@@ -102,6 +102,9 @@ void *process_client(void *thread_data_ptr_arg)
             receive_file(file_name, new_server_socket, file_size);
             cout << "Finish receiving" << endl;
             update_generate_torrent_list(file_name, file_size);
+            string peer_info = generate_piece_info(file_size);
+
+            update_peerlist(file_name, thread_data.ip, peer_info);
         }
         else if (0 == strcmp(command, "request"))
         {
@@ -191,15 +194,17 @@ int main(int argc, char **argv)
             continue;
         }
         
-
-        thread_data_t thread_data;
-        thread_data.thread_id = thread_id;
-        thread_data.socket = new_server_socket;
-        thread_data.ip = string(inet_ntoa(client_addr.sin_addr));
-        thread_data.port = (int) ntohs(client_addr.sin_port);
-
+        cout << "Going to assemble\n";
+        
+        thread_args[thread_id].thread_id = thread_id;
+        thread_args[thread_id].socket = new_server_socket;
+        thread_args[thread_id].ip = string(inet_ntoa(client_addr.sin_addr));
+        thread_args[thread_id].port = (int) ntohs(client_addr.sin_port);
+ 
+        cout << "Going to create thread\n";
         int rc = pthread_create(&thread_pool[thread_id], NULL, 
-                          process_client, (void *)&thread_data);
+                          process_client, (void *)&thread_args[thread_id]);
+
         threads_stats.lock();
         thread_used[thread_id] = true;
         threads_stats.unlock();
@@ -315,16 +320,47 @@ int get_free_thread_id()
     return i;
 }
 
+
+string generate_piece_info(long size)
+{
+    string piece_info = "";
+    double size_in_K = size/1024.0;
+
+    int piece_size = 4096;
+    int char_size = 4096 * 4;
+    
+    while (size_in_K > char_size)
+    {
+        size_in_K -= char_size;
+        piece_info += "F";
+    }
+    int last_char = 0;
+    int init = 8;
+    
+    while (size_in_K > 0)
+    {
+        size_in_K -= piece_size;
+        last_char += init;
+        init /= 2;
+    }
+    
+    stringstream ss;
+    ss << std::hex << last_char;
+    piece_info += string(ss.str());
+    return piece_info;
+}
+
 //TODO test needed
 //TODO lock of update peerlist need to be added
 void update_peerlist(char* file_name, string ip, string piece_info)
 {
-    string peer_list = string(file_name) + ".peer_list";
+    string peer_list = string(file_name) + ".peer";
     string temp_list = peer_list + ".temp";
 
     ifstream read_list(peer_list);
     ofstream write_list(temp_list);
 
+    bool add_done = false;
     if (read_list)
     {
         string line, ip_temp, new_peer_info;
@@ -340,7 +376,13 @@ void update_peerlist(char* file_name, string ip, string piece_info)
                 line_stream >> new_peer_info;
 
                 line = ip + " " + piece_info;
+                add_done = true;
             }
+            write_list << line + "\n";
+        }
+        if (!add_done)
+        {
+            line = ip + " " + piece_info;
             write_list << line + "\n";
         }
         read_list.close();
@@ -352,6 +394,4 @@ void update_peerlist(char* file_name, string ip, string piece_info)
     }
     write_list.close();
     rename(temp_list.c_str(), peer_list.c_str());
-
-
 }
