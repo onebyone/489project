@@ -8,7 +8,7 @@ using namespace std;
 
 bool have_piece(string bitmap, int piece_num);
 
-string choose_peer(int piece_num,  string peerlist_file);
+string choose_peer(int piece_num,  char* peerlist_file);
 
 
 #endif

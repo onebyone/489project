@@ -57,7 +57,12 @@ string choose_peer(int piece_num,  char* peerlist_file)
 	ifstream file_in(peerlist_file);
 	vector<string> ipvec;
 	if(file_in == NULL)
-		cout<<"No File Found"<<endl;
+    {
+        cout << "Cannot open peer list file " << peerlist_file << endl;
+        cout << "Exiting" << endl;
+        exit(1);
+    }
+
 	string ip;
 	string bitmap;
 	while(file_in>>ip>>bitmap)
@@ -69,7 +74,7 @@ string choose_peer(int piece_num,  char* peerlist_file)
 		}
 	}
 	if(ipvec.size() <= 0)
-		return "No Piece Found";
+		return "";
 	else
 	{
 		srand( (unsigned)time(NULL)); //生成种子
