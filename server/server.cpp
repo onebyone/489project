@@ -62,7 +62,6 @@ thread_data_t thread_args[MAX_CONNECTIONS];
 
 void *process_client(void *thread_data_ptr_arg)
 {
-    //thread_data_t* thread_data_ptr= (thread_data_t*) thread_data_ptr_arg;
     thread_data_t thread_data = *(thread_data_t*) thread_data_ptr_arg;
 
     int new_server_socket = thread_data.socket;
@@ -89,10 +88,9 @@ void *process_client(void *thread_data_ptr_arg)
 
         memcpy(file_name, buffer + index, FILE_NAME_MAX_SIZE);
         index += FILE_NAME_MAX_SIZE;
-
-        //memcpy(&file_size, buffer + index, sizeof(file_size));   
+   
         
-        if (0 == strcmp(command, "send") )
+        if (0 == strcmp(command, "sendTorrent") )
         {
 	        cout << "The command is " << command << endl;
         	cout << "File name is " << file_name << endl;
@@ -110,11 +108,15 @@ void *process_client(void *thread_data_ptr_arg)
         {
 	        cout << "The command is " << command << endl;
             cout << "Going to send file " << file_name << endl;
-            //get_file_size
-            //TODO big change
+
     		file_size = get_file_size(file_name);
-    		memcpy(buffer + index, &file_size, sizeof(file_size));
-    		printf("Send file size :%ld", file_size);
+            bzero(buffer, BUFFER_SIZE);
+            index = 0;
+    		memcpy(buffer, "OK", MAX_COMMAND_LEN);
+            index += MAX_COMMAND_LEN;
+            memcpy(buffer + index, &file_size, sizeof(file_size));
+            send(new_server_socket,buffer,BUFFER_SIZE,0);
+            send_file(file_name, new_server_socket);
     		
         }
         else if (0 == strcmp(command, "update"))
@@ -135,6 +137,7 @@ void *process_client(void *thread_data_ptr_arg)
     }
     cout << "Thread " << thread_id << " finish\n";
     threads_stats.lock();
+    pthread_detach(pthread_self());
     thread_used[thread_id] = false;
     threads_stats.unlock();
 
