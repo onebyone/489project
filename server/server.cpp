@@ -286,11 +286,16 @@ long get_file_size(char* file_name)
 {
     cout << "in get size" << endl;
     FILE * fp = fopen(file_name,"r");
-    fseek (fp, 0, SEEK_END);
-    long file_size_long = ftell (fp);
-    fclose(fp);
+    if (fp)
+    {
+        fseek (fp, 0, SEEK_END);
+        long file_size_long = ftell (fp);
+        fclose(fp);
 
-    return file_size_long;
+        return file_size_long;
+    }
+    cout << "Cannot open file " << file_name << endl;
+    exit(1);
 }
 
 
@@ -357,7 +362,18 @@ string generate_piece_info(long size)
 //TODO lock of update peerlist need to be added
 void update_peerlist(char* file_name, string ip, string piece_info)
 {
-    string peer_list = string(file_name) + ".peer";
+    string peer_list = string(file_name);
+    int pos = peer_list.find(".torrent");
+    if (-1 == pos && peer_list.size() - pos == 8)
+    {
+        peer_list += ".peers";
+    }
+    else
+    {
+        peer_list = peer_list.substr(0, pos) + ".peers";
+    }
+    peer_list = peer_list.substr(0, peer_list.size() 
+        - peer_list.find_last_of('.') - 1)+ ".peers";
     string temp_list = peer_list + ".temp";
 
     ifstream read_list(peer_list);
