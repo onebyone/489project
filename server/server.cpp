@@ -20,12 +20,7 @@
 #include <thread>
 #include <mutex>
 #include <vector>
-/*
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <unistd.h>
-*/
+
 
 using namespace std;
 #define HELLO_WORLD_SERVER_PORT    6666
@@ -49,6 +44,7 @@ void update_generate_torrent_list(char* file_name, long file_size);
 int get_free_thread_id();
 void update_peerlist(char* file_name, string ip, string piece_info);
 string generate_piece_info(long size);
+long get_file_size_from_torrent(char* torrent_name);
 
 struct thread_data_t{
    int thread_id;
@@ -94,11 +90,14 @@ void *process_client(void *thread_data_ptr_arg)
         {
 	        cout << "The command is " << command << endl;
         	cout << "File name is " << file_name << endl;
-        	cout << "File size is " << file_size << endl;
 
-            memcpy(&file_size, buffer + index, sizeof(file_size)); 
+            memcpy(&file_size, buffer + index, sizeof(file_size));
+            cout << "File size is " << file_size << endl;
+
             receive_file(file_name, new_server_socket, file_size);
             cout << "Finish receiving" << endl;
+
+            file_size = get_file_size_from_torrent(file_name);
             update_generate_torrent_list(file_name, file_size);
             string peer_info = generate_piece_info(file_size);
 
@@ -126,6 +125,7 @@ void *process_client(void *thread_data_ptr_arg)
             
             char peer_info[PEER_INFO_LEN];
             memcpy(peer_info, buffer + index, PEER_INFO_LEN); 
+
             update_peerlist(file_name, thread_data.ip, string(peer_info));
         }
         else
@@ -340,8 +340,9 @@ string generate_piece_info(long size)
     while (size_in_K > char_size)
     {
         size_in_K -= char_size;
-        piece_info += "F";
+        piece_info += "f";
     }
+
     int last_char = 0;
     int init = 8;
     
@@ -358,8 +359,7 @@ string generate_piece_info(long size)
     return piece_info;
 }
 
-//TODO test needed
-//TODO lock of update peerlist need to be added
+
 void update_peerlist(char* file_name, string ip, string piece_info)
 {
     string peer_list = string(file_name);
@@ -370,10 +370,11 @@ void update_peerlist(char* file_name, string ip, string piece_info)
     }
     else
     {
+        cout << "in else" <<  endl;
         peer_list = peer_list.substr(0, pos) + ".peers";
     }
-    peer_list = peer_list.substr(0, peer_list.size() 
-        - peer_list.find_last_of('.') - 1)+ ".peers";
+    cout << "In update peers file name is " << peer_list << endl;
+
     string temp_list = peer_list + ".temp";
 
     ifstream read_list(peer_list);
@@ -413,4 +414,19 @@ void update_peerlist(char* file_name, string ip, string piece_info)
     }
     write_list.close();
     rename(temp_list.c_str(), peer_list.c_str());
+}
+
+long get_file_size_from_torrent(char* torrent_name)
+{
+    ifstream fin(torrent_name);
+    if (NULL == fin)
+    {
+        cout << "Cannot open torrent " << torrent_name << endl;
+        return -1;
+    }
+    string line;
+    getline(fin, line);
+    getline(fin, line);
+    long file_size = stol(line.c_str());
+    return file_size;
 }
