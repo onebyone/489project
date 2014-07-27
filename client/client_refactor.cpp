@@ -1,23 +1,16 @@
-#include <netinet/in.h>    // for sockaddr_in
-#include <sys/types.h>    // for socket
-#include <sys/socket.h>    // for socket
-#include <stdio.h>        // for printf
-#include <stdlib.h>        // for exit
-#include <string.h>        // for bzero
 #include <cstring>
 #include <cstdio>
 
 #include <errno.h>
 #include <resolv.h>
-#include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
-#include <iostream>
-#include <fstream>
+#include <sstream>
 #include <pthread.h>
 #include <mutex>
-#include <string>
-#include "create_torrent.h"
+#include <vector>
+#include "file_ops.h"
+#include "netw_util.h"
 #include "analyze_peerlist.h"
 
 // create directory
@@ -37,18 +30,25 @@
 
 using namespace std;
 
+struct download_piece_info_t
+{
+    char* ip;//[20];
+    int port;
+    char* file_name;//[FILE_NAME_MAX_SIZE];
+    int piece_num;
+    long piece_size;
+};
 
-int send_file(char* file_name, int receiver_socket);
-int receive_file(char* file_name, int receiver_socket, long file_size);
-long get_file_size(char* file_name);
 void *listen_seed_request(void*);
-int form_connection(char* ip, int port);
 void generate_publish_torrent();
-void download_file(char* file_name);
-char* download_torrent_peer(char* file_name, bool torrent);
+void download_torrent(char* file_name);
+void* download_file(void* file_name_arg);
 void *seed_file(void* seeding_data);
-void anaylsis_download_file(char* file_name);
-int send_piece(char* file_name, long size, long piece_num, int socket);
+void analyze_download_file(char* torrent);
+bool request_download_piece(const download_piece_info_t&);
+void getTorrentList();
+void showTorrent();
+string update_piece_info(const vector<bool> &piece_record);
 
 pthread_t seed_thread;
 pthread_t download_thread;
@@ -60,7 +60,6 @@ int main(int argc, char **argv){
     char command[MAX_COMMAND_LEN];
     char serverAddress[16];
     cout << "Program start\n";
-    int dumb;
     while (1)
     {
         cout << "What do you want to do?: " ;
@@ -79,15 +78,31 @@ int main(int argc, char **argv){
         {
             generate_publish_torrent();
         }
-        else if (strcmp(command, "download") == 0)
+        else if (strcmp(command, "getTorrentList") == 0)
+        {
+            getTorrentList();
+        }
+        else if (strcmp(command, "downloadTorrent") == 0)
         {
             char file_name[FILE_NAME_MAX_SIZE];
+            cout << "Which file's torrent to download? ";
+            cin >> file_name;
+            download_torrent(file_name);
+        }
+        else if (strcmp(command, "downloadFile") == 0)
+        {
+            char *file_name;
+            file_name = new char[FILE_NAME_MAX_SIZE];
             cout << "Which file to download? ";
             cin >> file_name;
-            download_file(file_name);
-            // int rc = pthread_create(&download_thread, NULL, 
-            //     download_file, (void*)file_name);
-            // pthread_join(download_thread);
+            int rc = pthread_create(&download_thread, NULL,
+                download_file, (void*)file_name);
+        }
+        else
+        {
+            cout << "Usage:\n";
+            cout << "Available commands are quit, seed, sendTorrent, getTorrentList, downloadTorrent, downloadFile\n";
+
         }
     }
 
@@ -116,7 +131,10 @@ void generate_publish_torrent()
     strcpy(torrent_name, torrent_name_str.c_str());
 
     int client_socket = form_connection(server_ip, 6666);
-
+    if (client_socket < 0)
+    {
+        "Publish torrent failed\n";
+    }
     int index = 0;
     memcpy(buffer, "sendTorrent", MAX_COMMAND_LEN);
     index += MAX_COMMAND_LEN;
@@ -125,7 +143,7 @@ void generate_publish_torrent()
     index += FILE_NAME_MAX_SIZE;
 
     long file_size = get_file_size(torrent_name);
-    cout << "File size is " << file_size << endl;
+
     memcpy(buffer + index, &file_size, sizeof(file_size));
 
     send(client_socket,buffer , BUFFER_SIZE,0);
@@ -133,75 +151,238 @@ void generate_publish_torrent()
     close(client_socket);
 }
 
-void download_file(char* file_name)
+void download_torrent(char* file_name)
 {
-    cout << "enter download file thread\n";
-    //TODO
-    // string dir = string(file_name) + "+data";
-    // mkdir(dir.c_str(), 0777);
-    //char* file_name = (char*) file_name_arg;
-    char* torrent_file = download_torrent_peer(file_name, true);
-    char* peer_list = download_torrent_peer(file_name, false);
-
-    anaylsis_download_file(peer_list);
-}
-
-char* download_torrent_peer(char* file_name, bool torrent)
-{
-    cout << "Enter download torrent peer\n";
-    string download_name_str;
-    
-    char buffer[BUFFER_SIZE];
-    if (torrent) 
-    {
-        download_name_str = string(file_name) + ".torrent";
-    }
-    else
-    {
-        download_name_str = string(file_name) + ".peers";
-    }
-
-    char download_name[FILE_NAME_MAX_SIZE];
-    strcpy(download_name, download_name_str.c_str());
-
     char server_ip[16];
     cout << "Enter server ip: ";
     cin >> server_ip;
-    int client_socket = form_connection(server_ip, 6666);
 
-    int index = 0;
-    memcpy(buffer, "request", MAX_COMMAND_LEN);
-    index += MAX_COMMAND_LEN;
-    memcpy(buffer + index, download_name, FILE_NAME_MAX_SIZE);
-    index += FILE_NAME_MAX_SIZE;
+    strcat(file_name, ".torrent");
+    download_from_server(file_name, server_ip);
 
-    send(client_socket,buffer,BUFFER_SIZE,0);
-
-    bzero(buffer, BUFFER_SIZE);
-    recv(client_socket,buffer,BUFFER_SIZE,0);
-    long file_size;
-    char response[MAX_COMMAND_LEN];
-    index = 0;
-    memcpy(response, buffer, sizeof(MAX_COMMAND_LEN));
-    index += MAX_COMMAND_LEN;
-
-    memcpy(&file_size, buffer + index, sizeof(file_size));
-
-    if (0 == strcmp(response, "OK"))
-    {
-        receive_file(download_name, client_socket, file_size);
-    }
-    cout << "Returned to download torrent\n";
-    close(client_socket);
-    cout << "Closed" << endl;
-    return download_name;
+}
+void* download_file(void* file_name_arg)
+{
+    char* file_name = (char*) file_name_arg;
+    strcat(file_name, ".torrent");
+    analyze_download_file(file_name);
+    delete [] file_name;
 }
 
 
-
-void anaylsis_download_file(char* peerlist, char* torrent_file)
+void analyze_download_file(char* torrent_file)
 {
-   
+    cout << "Enter analyze_download_file\n";
+    ifstream read_torrent(torrent_file);
+
+    string line;
+    char file_name[FILE_NAME_MAX_SIZE], tracker[256];
+    long file_size;
+    int num_piece;
+    vector<string> hash_code;
+
+    if (read_torrent)
+    {
+        getline(read_torrent, line);
+        strcpy(file_name, line.c_str());
+
+        getline(read_torrent, line);
+        file_size = stol(line.c_str());
+        getline(read_torrent, line);
+        num_piece = atoi(line.c_str());
+        cout << "num_piece is " << num_piece << endl;
+        
+        for(int i=0; i < num_piece; i++)
+        {
+            getline(read_torrent, line);
+            hash_code.push_back(line);
+        }
+        getline(read_torrent, line);
+        strcpy(tracker, line.c_str());
+        cout << "Tracker is " << tracker << endl;
+        read_torrent.close();
+    }
+    else
+    {
+        cout << "Cannot open torrent file " << torrent_file << endl;
+        cout << "Exiting" << endl;
+        exit(1);
+    }
+    
+    cout << "Going to reach peer to download\n";
+    vector<bool> completion_record(num_piece, false);
+    int completion_counts = 0;
+    char peerlist[FILE_NAME_MAX_SIZE];
+    strcpy(peerlist, file_name);
+    strcat(peerlist, ".peers");
+    download_from_server(peerlist, tracker);
+
+    int loop_count = 0;
+    bool file_complete = true;
+    while (completion_counts < num_piece)
+    {
+        for (int i = 0; i <  num_piece; i++)
+        {
+            if (completion_record[i])
+            {
+                continue;
+            }
+            string ip = choose_peer(i, peerlist);
+
+            if ("" != ip)
+            {
+                cout << "ip is " << ip << endl;
+
+                long piece_size;
+                if (i == num_piece - 1)
+                {
+                    piece_size = file_size - i * PIECE_SIZE;
+                }
+                else
+                {
+                    piece_size = PIECE_SIZE;
+                }
+                cout << "After set piece_size " <<piece_size << endl;
+
+                download_piece_info_t download_piece_info;
+                
+                download_piece_info.file_name = file_name;
+                download_piece_info.port = 2080;
+                download_piece_info.piece_size = piece_size;
+                download_piece_info.piece_num = i;
+                char ip_arr[20];
+                strcpy(ip_arr, ip.c_str());
+                download_piece_info.ip = ip_arr;
+
+
+                if (request_download_piece(download_piece_info))
+                {
+                    completion_counts ++ ;
+                    completion_record[i] = true;
+
+                    sendUpdate(file_name, tracker, update_piece_info(completion_record));
+                }
+            }
+           
+        }
+        loop_count ++;
+        if (loop_count > 30)
+        {   
+            file_complete = false;
+            cout << "currently there is no more seeds availble for " << file_name << endl;
+            break;
+        }
+    }
+    if (file_complete)
+    {
+        combine_tmp(file_name,num_piece); 
+    }  
+    for (bool sta : completion_record)
+    {
+        cout << sta << endl;
+    }
+}
+
+string update_piece_info(const vector<bool> &piece_record)
+{
+    int base = 8;
+    int value_in_dec = 0;
+    string piece_info = "";
+    int num_piece = piece_record.size();
+
+    for (int i = 0; i< num_piece; i++)
+    {
+        if (i%4 == 0 && i > 0)
+        {
+            base = 8;
+            stringstream ss;
+            ss << std::hex << value_in_dec;
+            piece_info += string(ss.str());
+            value_in_dec = 0;
+        }
+        if (piece_record[i])
+        {
+            value_in_dec += base;
+        }
+        base /= 2;
+    }
+    if (0 != value_in_dec)
+    {
+        stringstream ss;
+        ss << std::hex << value_in_dec;
+        piece_info += string(ss.str());
+    }
+    return piece_info;
+}
+
+bool request_download_piece(const download_piece_info_t &download_info)
+{
+    int index = 0;
+    char buffer[BUFFER_SIZE];
+    char file_name [FILE_NAME_MAX_SIZE];
+
+    memcpy(file_name, download_info.file_name, FILE_NAME_MAX_SIZE);
+    bzero(buffer, BUFFER_SIZE);
+
+    memcpy(buffer, "requestPiece", MAX_COMMAND_LEN);
+    index += MAX_COMMAND_LEN;
+
+    cout << "file_name is " << download_info.file_name << endl;
+    memcpy(buffer + index, download_info.file_name, FILE_NAME_MAX_SIZE);
+    index += FILE_NAME_MAX_SIZE;
+
+    int piece_num = download_info.piece_num;
+    cout << "piece is " << piece_num << endl;
+    memcpy(buffer + index, &piece_num, sizeof(piece_num));
+    index += sizeof(piece_num);
+
+    
+    long piece_size = download_info.piece_size;
+    cout << "file size is " << piece_size << endl;
+    memcpy(buffer + index, &piece_size, sizeof(piece_size));
+
+    cout << "Before peer socket ip is " << download_info.ip << endl;   
+    int peer_socket = form_connection(download_info.ip, download_info.port);
+
+    if (peer_socket < 0)
+    {
+        cout << "Cannot connect to peer " << download_info.ip << endl;
+        return false;
+    }
+
+    cout << "Set up connection done\n";
+
+    send(peer_socket, buffer, BUFFER_SIZE, 0);
+
+
+    bzero(buffer, BUFFER_SIZE);
+    recv(peer_socket, buffer, BUFFER_SIZE, 0);
+    char ack[MAX_COMMAND_LEN];
+    memcpy(ack, buffer, MAX_COMMAND_LEN);
+    
+    char piece_name[FILE_NAME_MAX_SIZE];
+    sprintf(piece_name,"%s_%d",file_name, piece_num);
+    if (0 == strcmp(ack, "OK"))
+    {
+        cout << "It is OK\n";
+        cout << "file piece name is " << piece_name << endl;
+        receive_file(piece_name, peer_socket, piece_size);
+    }
+    else
+    {
+        cout << "No acknowledga from peer\n";
+
+    }
+
+    char torrent_name[FILE_NAME_MAX_SIZE];
+
+    sprintf(torrent_name,"%s.torrent",file_name);
+    if (0 != verify_piece(torrent_name, piece_name, piece_num))
+    {
+        cout << "Error eccured in downloading piece " << piece_num << endl;
+        return false;
+    }
+    return true;
 }
 
 
@@ -252,15 +433,13 @@ void *listen_seed_request(void*)
         }
         
         int rc = pthread_create(&seed_thread, NULL, 
-            seed_file, (void*)&peer_socket);
+            seed_file, (void*)peer_socket);
     }
 }
 
 void *seed_file(void* seeding_data)
 {
-    //string file_name = seeding_data.file_name;
-    //long piece = seeding_data.piece;
-    int peer_socket = *(int*)seeding_data;
+    long peer_socket = (long)seeding_data;
 
     char buffer[BUFFER_SIZE];
     bzero(buffer, BUFFER_SIZE);
@@ -274,10 +453,10 @@ void *seed_file(void* seeding_data)
         pthread_exit(0);
     }
 
-    char command[10];
+    char command[MAX_COMMAND_LEN];
     char file_name[FILE_NAME_MAX_SIZE];
     long file_size;
-    long piece_num;
+    int piece_num;
     int index = 0;
     memcpy(command, buffer, MAX_COMMAND_LEN);
     index += MAX_COMMAND_LEN;
@@ -290,160 +469,41 @@ void *seed_file(void* seeding_data)
 
     memcpy(&file_size, buffer + index, sizeof(file_size));
 
-    send_piece(file_name, file_size, piece_num, peer_socket);
+    if (0 == strcmp(command, "requestPiece"))
+    {
+        bzero(buffer, BUFFER_SIZE);
+        memcpy(buffer, "OK", MAX_COMMAND_LEN);
+        send(peer_socket,buffer, BUFFER_SIZE, 0);
+        cout << "send OK done\n";
+        send_piece(file_name, file_size, piece_num, peer_socket);
+    }
     
     close(peer_socket);
 
 }
 
-int send_piece(char* file_name, long size, long piece_num, int socket)
+
+void getTorrentList()
 {
-    ifstream input(file_name, ios::binary);
-    char piece[size];
-    char buffer[BUFFER_SIZE];
-    input.seekg(piece_num * PIECE_SIZE);
-    input.read(piece, size);
-    
-    int index = 0;
-    int block_size;
-    while (size > 0)
-    {
-        if (size - BUFFER_SIZE < 0)
-        {
-            block_size = size - BUFFER_SIZE;
-        }
-        else
-        {
-            block_size = BUFFER_SIZE;
-        }
-        memcpy(piece + index, buffer, block_size);
-        if(send(socket,buffer,block_size,0)<0)
-        {
-            printf("Send File:\t%s Failed\n", file_name);
-            break;
-        }
-        bzero(buffer, BUFFER_SIZE);
-        size -= BUFFER_SIZE;
-    }
-    return 0;
+    char server_ip[16];
+    cout << "Enter server ip: ";
+    cin >> server_ip;
+    char file_name[FILE_NAME_MAX_SIZE] = "torrent_list";
+    download_from_server(file_name, server_ip);
+    showTorrent();
 }
 
-int form_connection(char* ip, int port)
+void showTorrent()
 {
-    struct sockaddr_in client_addr;
-    bzero(&client_addr,sizeof(client_addr));
-    client_addr.sin_family = AF_INET;
-    client_addr.sin_addr.s_addr = htons(INADDR_ANY);
-    client_addr.sin_port = htons(0);
-
-    int client_socket = socket(AF_INET,SOCK_STREAM,0);
-    if( client_socket < 0)
+    ifstream inf("torrent_list");
+    if (inf == NULL)
     {
-        printf("Create Socket Failed!\n");
-        exit(1);
+        cout << "Error cannot open torrent list\n";
+        return;
     }
-
-    if( bind(client_socket,(struct sockaddr*)&client_addr,sizeof(client_addr)))
+    string line;
+    while (getline(inf, line))
     {
-        printf("Client Bind Port Failed!\n"); 
-        exit(1);
+        cout << line << endl;
     }
-
-
-    struct sockaddr_in server_addr;
-    bzero(&server_addr,sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    if(inet_aton(ip,&server_addr.sin_addr) == 0)
-    {
-        printf("Server IP Address Error!\n");
-        exit(1);
-    }
-    server_addr.sin_port = htons(HELLO_WORLD_SERVER_PORT);
-    socklen_t server_addr_length = sizeof(server_addr);
-
-    if(connect(client_socket,(struct sockaddr*)&server_addr, server_addr_length) < 0)
-    {
-        printf("Can Not Connect To %s!\n",ip);
-        exit(1);
-    }
-
-    return client_socket;
-}
-
-int send_file(char* file_name, int receiver_socket)
-{
-    FILE * fp = fopen(file_name,"r");
-    char buffer[BUFFER_SIZE];
-    if(NULL == fp )
-    {
-        printf("File:\t%s Not Found\n", file_name);
-    }
-    else
-    {
-        bzero(buffer, BUFFER_SIZE);
-        int file_block_length = 0;
-
-        while( (file_block_length = fread(buffer,sizeof(char),BUFFER_SIZE,fp))>0)
-        {
-            //printf("file_block_length = %d\n",file_block_length);
-
-            if(send(receiver_socket,buffer,file_block_length,0)<0)
-            {
-                printf("Send File:\t%s Failed\n", file_name);
-                break;
-            }
-            bzero(buffer, BUFFER_SIZE);
-        }             
-        fclose(fp);
-        printf("File:\t%s Transfer Finished\n",file_name);
-        //close(receiver_socket);
-    }
-}
-
-int receive_file(char* file_name, int receiver_socket, long file_size)
-{
-    cout << "In receive_file " << file_name << endl;
-    FILE * fp = fopen(file_name,"w");
-    if(NULL == fp )
-    {
-        printf("File:\t%s Can Not Open To Write\n", file_name);
-        exit(1);
-    }
-    
-    //从服务器接收数据到buffer中
-    char buffer[BUFFER_SIZE];
-    bzero(buffer,BUFFER_SIZE);
-    int length = 0;
-    while( file_size > 0)       //循环接收，再写到文件
-    {
-        length = recv(receiver_socket,buffer,BUFFER_SIZE,0);
-        if(length < 0)
-        {
-            cout << "Recieve Data From Server Failed!\n";
-            break;
-        }
-        int write_length = fwrite(buffer,sizeof(char),length,fp);
-        if (write_length<length)
-        {
-            printf("File:\t%s Write Failed\n", file_name);
-            break;
-        }
-        bzero(buffer,BUFFER_SIZE);  
-        file_size -=  length;
-    }
-    cout << "Recieve File:\t "<<file_name<<" From server Finished\n";
-    
-    fclose(fp);
-}
-
-
-long get_file_size(char* file_name)
-{
-    cout << "in get size" << endl;
-    FILE * fp = fopen(file_name,"r");
-    fseek (fp, 0, SEEK_END);   // non-portable
-    long file_size_long = ftell (fp);
-    fclose(fp);
-
-    return file_size_long;
 }

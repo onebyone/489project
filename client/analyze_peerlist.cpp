@@ -14,12 +14,8 @@ bool have_piece(string bitmap, int piece_num)
 	// piece_num start from 1
 	i = piece_num / 4;
 	j = piece_num % 4;
-	char hex_num;
-	if(j == 0) 
-		hex_num = bitmap[i-1];
-	else
-		hex_num = bitmap[i];
-	//cout<<hex_num<<endl;
+	char hex_num = bitmap[i];
+
 	if(hex_num == '0')	binary_num = "0000";
 	if(hex_num == '1')	binary_num = "0001";
 	if(hex_num == '2')	binary_num = "0010";
@@ -36,20 +32,14 @@ bool have_piece(string bitmap, int piece_num)
 	if(hex_num == 'D' || hex_num =='d'  )	binary_num = "1101";
 	if(hex_num == 'E' || hex_num == 'e' )	binary_num = "1110";
 	if(hex_num == 'F' || hex_num =='f'  )	binary_num = "1111";
-	if(j == 0) 
-	{
-		if(binary_num[3]=='1') 
-			return 1;
-		else
-			return 0;
-	}
+
+
+	if(binary_num[j]=='1') 
+		return 1;
 	else
-	{
-		if(binary_num[j-1]=='1') 
-			return 1;
-		else
-			return 0;
-	}
+		return 0;
+
+
 }
 
 string choose_peer(int piece_num,  char* peerlist_file)
@@ -67,17 +57,17 @@ string choose_peer(int piece_num,  char* peerlist_file)
 	string bitmap;
 	while(file_in>>ip>>bitmap)
 	{
-		cout<<ip<<" "<<bitmap<<endl;
 		if( have_piece( bitmap , piece_num ) )
 		{
 			ipvec.push_back(ip);
 		}
 	}
+	file_in.close();
 	if(ipvec.size() <= 0)
 		return "";
 	else
 	{
-		srand( (unsigned)time(NULL)); //生成种子
+		srand( (unsigned)time(NULL));
 		int index;
 		index = rand()%(ipvec.size()) ;
 		return ipvec[index];
