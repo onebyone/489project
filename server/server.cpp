@@ -94,10 +94,18 @@ void *process_client(void *thread_data_ptr_arg)
             memcpy(&file_size, buffer + index, sizeof(file_size));
             cout << "File size is " << file_size << endl;
 
-            receive_file(file_name, new_server_socket, file_size);
+            if (0 > receive_file(file_name, new_server_socket, file_size))
+            {
+                cout << "Receive file " << file_name << " failed" << endl;
+                break;
+            }
             cout << "Finish receiving" << endl;
 
             file_size = get_file_size_from_torrent(file_name);
+            if (file_size < 0)
+            {
+                break;
+            }
             update_generate_torrent_list(file_name, file_size);
             string peer_info = generate_piece_info(file_size);
 
@@ -109,6 +117,10 @@ void *process_client(void *thread_data_ptr_arg)
             cout << "Going to send file " << file_name << endl;
 
     		file_size = get_file_size(file_name);
+            if (file_size < 0)
+            {
+                break;
+            }
             bzero(buffer, BUFFER_SIZE);
             index = 0;
     		memcpy(buffer, "OK", MAX_COMMAND_LEN);
@@ -130,11 +142,11 @@ void *process_client(void *thread_data_ptr_arg)
         }
         else
         {
-            close(new_server_socket);
             break;
         }
         bzero(buffer, BUFFER_SIZE);
     }
+    close(new_server_socket);
     cout << "Thread " << thread_id << " finish\n";
     threads_stats.lock();
     pthread_detach(pthread_self());
@@ -253,7 +265,7 @@ int receive_file(char* file_name, int receiver_socket, long file_size)
     if(NULL == fp )
     {
         printf("File:\t%s Can Not Open To Write\n", file_name);
-        exit(1);
+        return -1;
     }
     
 
@@ -295,7 +307,7 @@ long get_file_size(char* file_name)
         return file_size_long;
     }
     cout << "Cannot open file " << file_name << endl;
-    exit(1);
+    return -1;
 }
 
 
