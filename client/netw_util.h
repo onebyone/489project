@@ -23,7 +23,7 @@ using namespace std;
 
 void download_from_server(char* file_name, char* ip);
 void sendUpdate(char* file_name,char* tracker, string piece_info_str);
-int send_piece(char* file_name, long size, int piece_num, int socket);
+int send_piece_from_file(char* file_name, long size, int piece_num, int socket);
 int form_connection(const char* ip, int port);
 int send_file(char* file_name, int receiver_socket);
 int receive_file(char* file_name, int receiver_socket, long file_size);

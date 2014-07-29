@@ -12,6 +12,7 @@ void download_from_server(char* file_name, char* ip)
     if (client_socket < 0)
     {
         cout << "Download file " << file_name << " from " << ip << " failed\n";
+        return;
     }
 
     int index = 0;
@@ -40,7 +41,7 @@ void download_from_server(char* file_name, char* ip)
     close(client_socket);
 }
 
-int send_piece(char* file_name, long size, int piece_num, int socket)
+int send_piece_from_file(char* file_name, long size, int piece_num, int socket)
 {
     cout << "Going to send piece\n";
     cout << "The piece size is " << size << endl;
@@ -48,8 +49,7 @@ int send_piece(char* file_name, long size, int piece_num, int socket)
     if (NULL == input)
     {
         cout << "Cannot open file " << file_name << endl;
-        cout << "Exiting" << endl;
-        exit(1);
+        return -1;
     }
     char piece[size];
     char buffer[BUFFER_SIZE];
@@ -93,6 +93,7 @@ void sendUpdate(char* file_name,char* tracker, string piece_info_str)
     if (tracker_socket < 0)
     {
         cout << "Download file " << file_name << " from " << tracker << " failed\n";
+        return;
     }
 
     int index = 0;
@@ -122,13 +123,13 @@ int form_connection(const char* ip, int port)
     if( client_socket < 0)
     {
         printf("Create Socket Failed!\n");
-        exit(1);
+       return -1;
     }
 
     if( bind(client_socket,(struct sockaddr*)&client_addr,sizeof(client_addr)))
     {
         printf("Client Bind Port Failed!\n"); 
-        exit(1);
+        return -1;
     }
 
     struct sockaddr_in server_addr;
@@ -137,7 +138,7 @@ int form_connection(const char* ip, int port)
     if(inet_aton(ip,&server_addr.sin_addr) == 0)
     {
         printf("Server IP Address Error!\n");
-        exit(1);
+        return -1;
     }
 
     server_addr.sin_port = htons(port);
@@ -145,7 +146,6 @@ int form_connection(const char* ip, int port)
 
     if(connect(client_socket,(struct sockaddr*)&server_addr, server_addr_length) < 0)
     {
-        cout << "inside if?" << endl;
         printf("Can Not Connect To %s!\n",ip);
         return -1;
     }
@@ -189,7 +189,7 @@ int receive_file(char* file_name, int receiver_socket, long file_size)
     if(NULL == fp )
     {
         printf("File:\t%s Can Not Open To Write\n", file_name);
-        exit(1);
+        return -1;
     }
     
 

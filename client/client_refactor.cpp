@@ -53,6 +53,7 @@ string update_piece_info(const vector<bool> &piece_record);
 pthread_t seed_thread;
 pthread_t download_thread;
 pthread_t listen_request;
+char server_ip[20];
 
 
 int main(int argc, char **argv){
@@ -60,6 +61,11 @@ int main(int argc, char **argv){
     char command[MAX_COMMAND_LEN];
     char serverAddress[16];
     cout << "Program start\n";
+    cout << "Please set the server ip first\n";
+    cout << "Server ip: ";
+    cin >> server_ip;
+    cout << "Server ip is set to " << server_ip << endl;
+
     while (1)
     {
         cout << "What do you want to do?: " ;
@@ -98,10 +104,28 @@ int main(int argc, char **argv){
             int rc = pthread_create(&download_thread, NULL,
                 download_file, (void*)file_name);
         }
+        else if (strcmp(command, "stopSeed") == 0)
+        {
+
+        }
+        else if (strcmp(command, "changeServerIP") == 0)
+        {
+            cin >> server_ip;
+            cout << "Server ip is set to " << server_ip << endl;
+        }
+        else if (strcmp(command, "contDownloadFile") == 0)
+        {
+            char *file_name;
+            file_name = new char[FILE_NAME_MAX_SIZE];
+            cout << "Which file to continue download? ";
+            cin >> file_name;
+            int rc = pthread_create(&download_thread, NULL,
+                download_file, (void*)file_name);
+        }
         else
         {
             cout << "Usage:\n";
-            cout << "Available commands are quit, seed, sendTorrent, getTorrentList, downloadTorrent, downloadFile\n";
+            cout << "Available commands are quit, seed, sendTorrent, getTorrentList, downloadTorrent, downloadFile, contDownloadFile\n";
 
         }
     }
@@ -116,10 +140,10 @@ void generate_publish_torrent()
     char buffer[BUFFER_SIZE];
     cout << "Which file to generate torrent? ";
     cin >> file_name;
-    char server_ip[16];
-    cout << "Enter server ip: ";
-    cin >> server_ip;
-    create_torrent(file_name, server_ip);
+    if(create_torrent(file_name, server_ip) < 0)
+    {
+        cout << "create Torrent " << file_name << "failed\n";
+    }
   
     string torrent_name_str = string(file_name);
     torrent_name_str.erase(torrent_name_str.size() -1 );
@@ -134,6 +158,7 @@ void generate_publish_torrent()
     if (client_socket < 0)
     {
         "Publish torrent failed\n";
+        return;
     }
     int index = 0;
     memcpy(buffer, "sendTorrent", MAX_COMMAND_LEN);
@@ -143,6 +168,11 @@ void generate_publish_torrent()
     index += FILE_NAME_MAX_SIZE;
 
     long file_size = get_file_size(torrent_name);
+    if (file_size < 0)
+    {
+        cout << "Error occured in get " << torrent_name << "\'s size\n";
+        return;
+    }
 
     memcpy(buffer + index, &file_size, sizeof(file_size));
 
@@ -153,10 +183,6 @@ void generate_publish_torrent()
 
 void download_torrent(char* file_name)
 {
-    char server_ip[16];
-    cout << "Enter server ip: ";
-    cin >> server_ip;
-
     strcat(file_name, ".torrent");
     download_from_server(file_name, server_ip);
 
@@ -205,20 +231,24 @@ void analyze_download_file(char* torrent_file)
     else
     {
         cout << "Cannot open torrent file " << torrent_file << endl;
-        cout << "Exiting" << endl;
-        exit(1);
+        return;
     }
     
     cout << "Going to reach peer to download\n";
     vector<bool> completion_record(num_piece, false);
     int completion_counts = 0;
+    if ( 0 > check_prev_download(completion_record, completion_counts, file_name))
+    {
+        cout << "File " << file_name << " has already been downloaded\n";
+        return;
+    }
     char peerlist[FILE_NAME_MAX_SIZE];
     strcpy(peerlist, file_name);
     strcat(peerlist, ".peers");
     download_from_server(peerlist, tracker);
 
     int loop_count = 0;
-    bool file_complete = true;
+    //bool file_complete = true;
     while (completion_counts < num_piece)
     {
         for (int i = 0; i <  num_piece; i++)
@@ -268,14 +298,17 @@ void analyze_download_file(char* torrent_file)
         loop_count ++;
         if (loop_count > 30)
         {   
-            file_complete = false;
+            //file_complete = false;
             cout << "currently there is no more seeds availble for " << file_name << endl;
             break;
         }
     }
-    if (file_complete)
+    if (completion_counts == num_piece)
     {
-        combine_tmp(file_name,num_piece); 
+        if (combine_tmp(file_name,num_piece) <0)
+        {
+            cout << "Combine piece file failed\n"; 
+        }
     }  
     for (bool sta : completion_record)
     {
@@ -367,22 +400,22 @@ bool request_download_piece(const download_piece_info_t &download_info)
         cout << "It is OK\n";
         cout << "file piece name is " << piece_name << endl;
         receive_file(piece_name, peer_socket, piece_size);
-    }
+        char torrent_name[FILE_NAME_MAX_SIZE];
+
+        sprintf(torrent_name,"%s.torrent",file_name);
+        if (0 != verify_piece(torrent_name, piece_name, piece_num))
+        {
+            cout << "Error eccured in downloading piece " << piece_num << endl;
+            return false;
+        }
+        return true;
+    }   
     else
     {
         cout << "No acknowledga from peer\n";
-
-    }
-
-    char torrent_name[FILE_NAME_MAX_SIZE];
-
-    sprintf(torrent_name,"%s.torrent",file_name);
-    if (0 != verify_piece(torrent_name, piece_name, piece_num))
-    {
-        cout << "Error eccured in downloading piece " << piece_num << endl;
         return false;
+
     }
-    return true;
 }
 
 
@@ -403,20 +436,20 @@ void *listen_seed_request(void*)
     if( client_socket < 0)
     {
         printf("Create Socket Failed!\n");
-        exit(1);
+        pthread_exit(0);
     }
 
     if( bind(client_socket,(struct sockaddr*)&client_addr,sizeof(client_addr)))
     {
         printf("Client Bind Port Failed!\n"); 
-        exit(1);
+        pthread_exit(0);
     }
     cout << "Seeding start\n";
 
     if ( listen(client_socket, LENGTH_OF_LISTEN_QUEUE) )
     {
-        printf("Server Listen Failed!");
-        exit(1);
+        printf("client Start Listen Peer Failed!");
+        pthread_exit(0);
     }
 
     while(1)
@@ -435,6 +468,7 @@ void *listen_seed_request(void*)
         int rc = pthread_create(&seed_thread, NULL, 
             seed_file, (void*)peer_socket);
     }
+    pthread_detach(pthread_self());
 }
 
 void *seed_file(void* seeding_data)
@@ -443,7 +477,6 @@ void *seed_file(void* seeding_data)
 
     char buffer[BUFFER_SIZE];
     bzero(buffer, BUFFER_SIZE);
-    //TODO woshou
 
     int length = recv(peer_socket,buffer,BUFFER_SIZE,0);
     if (length < 0)
@@ -469,25 +502,42 @@ void *seed_file(void* seeding_data)
 
     memcpy(&file_size, buffer + index, sizeof(file_size));
 
-    if (0 == strcmp(command, "requestPiece"))
+    Have_piece have_piece= is_file_piece_exist(file_name, piece_num);
+    if (0 == strcmp(command, "requestPiece") && have_piece < 2)
     {
         bzero(buffer, BUFFER_SIZE);
         memcpy(buffer, "OK", MAX_COMMAND_LEN);
         send(peer_socket,buffer, BUFFER_SIZE, 0);
         cout << "send OK done\n";
-        send_piece(file_name, file_size, piece_num, peer_socket);
+        int send_success = 0;
+        if (have_piece == HAVE_FILE)
+        {
+            send_success = send_piece_from_file(file_name, file_size, piece_num, peer_socket);
+        }
+        else
+        {
+            sprintf(file_name,"%s_%d",file_name, piece_num);
+            send_success = send_file(file_name, peer_socket);
+        }
+        if (send_success < 0)
+        {
+            cout << "Send piece " << file_name << " " << piece_num << "failed" << endl;
+        }
     }
-    
+    else
+    {
+        cout << "Not seeding the piece\n";
+        cout << "Result num is " << have_piece << endl;
+        cout << "Requested piece is " << file_name << " " << piece_num << endl;
+    }
     close(peer_socket);
+    pthread_detach(pthread_self());
 
 }
 
 
 void getTorrentList()
 {
-    char server_ip[16];
-    cout << "Enter server ip: ";
-    cin >> server_ip;
     char file_name[FILE_NAME_MAX_SIZE] = "torrent_list";
     download_from_server(file_name, server_ip);
     showTorrent();

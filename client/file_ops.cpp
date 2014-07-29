@@ -1,7 +1,3 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <cstring>
-#include <iostream>
 #include "file_ops.h"
 
 #define pieceSize (4096*1024)
@@ -18,7 +14,11 @@ int combine_tmp(const char* file_name, long piece_num){
 	char buff[pieceSize];
 
 	fd1 = fopen(file_name,"wb");
-	if (fd1==NULL) {fputs ("File error\n",stderr); exit (1);}
+	if (fd1==NULL) 
+	{
+		fputs ("File error\n",stderr); 
+		return -1;
+	}
 
 	for (int i=0; i<piece_num;i++){
 		sprintf(tmp_name,"%s_%d",file_name, i);
@@ -44,7 +44,7 @@ int combine_tmp(const char* file_name, long piece_num){
 	return 0;	
 }
 
-void create_torrent(char* file_name, char* tracker_name)
+int create_torrent(char* file_name, char* tracker_name)
 {
 	FILE* fd;
 	FILE* ftorrent;
@@ -56,9 +56,17 @@ void create_torrent(char* file_name, char* tracker_name)
 	strcat(torrent_name,".torrent"); 
 
 	fd = fopen(file_name,"r");
-	if (fd==NULL) {fputs ("File error\n",stderr); exit (1);}
+	if (fd==NULL) 
+	{
+		fputs ("File error\n",stderr); 
+		return -1;
+	}
 	ftorrent=fopen(torrent_name,"w");
-	if (ftorrent==NULL) {fputs ("File error\n",stderr); exit (1);}
+	if (ftorrent==NULL) 
+	{
+		fputs ("File error\n",stderr); 
+		return -1;
+	}
 
 	// obtain file size
 	fseek (fd , 0 , SEEK_END);
@@ -111,9 +119,17 @@ int verify_piece(char* torrent_addr, char* piece_addr, long piece_num){
 	// open both files
 
 	fd = fopen(piece_addr,"r");
-	if (fd==NULL) {fputs ("File error\n",stderr); exit (1);}
+	if (fd==NULL) 
+	{
+		fputs ("File error\n",stderr); 
+		return -1;
+	}
 	ftorrent=fopen(torrent_addr,"r");
-	if (ftorrent==NULL) {fputs ("File error\n",stderr); exit (1);}
+	if (ftorrent==NULL) 
+	{
+		fputs ("File error\n",stderr); 
+		return -1;
+	}
 
 	// obtain file size
 	fseek (fd , 0 , SEEK_END);
@@ -140,9 +156,119 @@ int verify_piece(char* torrent_addr, char* piece_addr, long piece_num){
 long get_file_size(char* file_name)
 {
     FILE * fp = fopen(file_name,"r");
+    if (fp == NULL)
+    {
+    	cout << "Cannot open file " << file_name << endl;
+    	return -1;
+    }
     fseek (fp, 0, SEEK_END);
     long file_size_long = ftell (fp);
     fclose(fp);
 
     return file_size_long;
 }
+
+Have_piece is_file_piece_exist(char* file_name, int piece_num)
+{
+	char piece_name[256];
+	if (piece_num >= 0)
+	{
+		sprintf(piece_name,"%s_%d",file_name, piece_num);
+	}
+    DIR *dir;
+
+    dir = opendir(".");
+    struct dirent *ent;
+
+    if (dir != NULL) {
+    /* print all the files and directories within directory */
+        while ((ent = readdir (dir)) != NULL) {
+        	char* name = ent->d_name;
+        	if (0 == strcmp(name, piece_name))
+            {
+            	closedir (dir);
+                return HAVE_PIECE;
+            }
+            else if (0 == strcmp(name, file_name)) {
+            	closedir (dir);
+                return HAVE_FILE;
+            } 
+        }
+        closedir (dir);
+    } else {
+        /* could not open directory */
+        cerr << "could not open location " << dir <<endl;
+    }
+    return NONE;
+}
+
+bool is_all_number(char* arr, int len)
+{
+	for (int i = 0; i < len; i++)
+	{
+		if (arr[i] > '9' || arr[i] < '0')
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
+int check_prev_download(vector<bool> &completion_record, int &completion_counts, char* file_name)
+{
+	int file_name_len = strlen(file_name);
+
+    DIR *dir;
+
+    dir = opendir(".");
+    struct dirent *ent;
+
+    char prefix[30];
+    char piece_num_arr[20];
+    int piece_num;
+
+    if (dir != NULL) {
+        while ((ent = readdir (dir)) != NULL) {
+        	char* name = ent->d_name;
+        	if (strcmp(name, file_name) == 0)
+        	{
+        		return -1;
+        	}
+        	if (strlen(name) < file_name_len + 2)
+        	{
+        		continue;
+        	}
+        	if (name[file_name_len] != '_')
+        	{
+        		continue;
+        	}
+
+        	bzero(prefix, 20);
+        	memcpy(prefix, name, file_name_len);
+
+        	if (strcmp(prefix, file_name) != 0)
+        	{
+        		continue;
+        	}
+    		int digit_len = strlen(name) - file_name_len - 1;
+    		memcpy(piece_num_arr, name + file_name_len + 1, digit_len);
+    		if (!is_all_number(piece_num_arr, digit_len))
+    		{
+    			continue;
+    		}
+    		piece_num = atoi(piece_num_arr);
+    		if (piece_num > completion_record.size())
+    		{
+    			continue;
+    		}
+    		completion_record[piece_num] = true;
+    		completion_counts ++;
+        }
+        closedir (dir);
+    } else {
+        /* could not open directory */
+        cerr << "could not open location " << dir <<endl;
+    }
+    return 0;
+}
+
