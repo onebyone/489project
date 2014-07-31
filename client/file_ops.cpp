@@ -222,10 +222,15 @@ int check_prev_download(vector<bool> &completion_record, int &completion_counts,
 
     dir = opendir(".");
     struct dirent *ent;
+    
 
     char prefix[30];
+    char torrent_name[255];
     char piece_num_arr[20];
     int piece_num;
+  
+    strcpy(torrent_name,file_name);
+    strcat(torrent_name,".torrent");
 
     if (dir != NULL) {
         while ((ent = readdir (dir)) != NULL) {
@@ -261,8 +266,10 @@ int check_prev_download(vector<bool> &completion_record, int &completion_counts,
     		{
     			continue;
     		}
-    		completion_record[piece_num] = true;
-    		completion_counts ++;
+		if (verify_piece(torrent_name, name, piece_num)) {
+	    		completion_record[piece_num] = true;
+	    		completion_counts ++;
+		}
         }
         closedir (dir);
     } else {
