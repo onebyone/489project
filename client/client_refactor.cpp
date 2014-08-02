@@ -245,6 +245,7 @@ void analyze_download_file(char* torrent_file)
     {
         for (int i = 0; i <  num_piece; i++)
         {
+	    loop_count++;
             if (completion_record[i])
             {
                 continue;
@@ -286,7 +287,13 @@ void analyze_download_file(char* torrent_file)
                 }
 		else
 		  remove_ip(active_ip, ip);
-            }       
+            }
+
+            if (loop_count>20) {  
+                download_from_server(peerlist, tracker);
+    		add_ip_from_peerlist(active_ip, peerlist);  
+		loop_count=0;
+	    }
         }
     	if (active_ip.empty()) {
     	    cout << "currently there is no more seeds availble for " << file_name << endl;
