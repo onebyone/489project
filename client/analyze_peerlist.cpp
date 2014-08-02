@@ -42,7 +42,7 @@ bool have_piece(string bitmap, int piece_num)
 
 }
 
-string choose_peer(int piece_num,  char* peerlist_file)
+string choose_peer(int piece_num,  char* peerlist_file, vector<ip_struct> &active_ip)
 {
 	ifstream file_in(peerlist_file);
 	vector<string> ipvec;
@@ -57,7 +57,7 @@ string choose_peer(int piece_num,  char* peerlist_file)
 	string bitmap;
 	while(file_in>>ip>>bitmap)
 	{
-		if( have_piece( bitmap , piece_num ) )
+		if( have_piece( bitmap , piece_num ) && ifactive(active_ip,ip))
 		{
 			ipvec.push_back(ip);
 		}
@@ -73,3 +73,54 @@ string choose_peer(int piece_num,  char* peerlist_file)
 		return ipvec[index];
 	}
 }
+
+void add_ip_from_peerlist(vector<ip_struct> &active_ip, char* peerlist_file){
+
+	ifstream file_in(peerlist_file);
+	string ip;
+	string bitmap;
+	while(file_in>>ip>>bitmap)
+	{
+		int i=0;
+		while( active_ip.size() != i )
+		{
+			string tempip = active_ip[i].ip ;
+			if(tempip == ip) return;
+			i++;
+		}
+		if (i==active_ip.size()) {
+			struct ip_struct entry;
+			entry.ip=ip;
+			entry.connect=5;
+			active_ip.push_back(entry);
+		}
+	}
+	file_in.close();
+}
+
+int remove_ip(vector<ip_struct> &active_ip, string ip)
+{
+	int i=0;
+	while( active_ip.size() != i )
+	{
+		string tempip = active_ip[i].ip ;
+		if(tempip == ip) 
+			return --active_ip[i].connect;
+		i++;
+	}
+	return 0;
+}
+
+bool ifactive(vector<ip_struct> &active_ip, string ip)
+{
+	int i=0;
+	while( active_ip.size() != i )
+	{
+		string tempip = active_ip[i].ip;
+		if(tempip == ip)
+			return active_ip[i].connect>0;
+		i++;
+	}
+	return false;
+}
+

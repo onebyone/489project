@@ -103,25 +103,15 @@ int main(int argc, char **argv){
             cin >> file_name;
             int rc = pthread_create(&download_thread, NULL,
                 download_file, (void*)file_name);
-        }
-        else if (strcmp(command, "stopSeed") == 0)
-        {
-
+            pthread_create(&listen_request, NULL, 
+                listen_seed_request, NULL);		
         }
         else if (strcmp(command, "changeServerIP") == 0)
         {
             cin >> server_ip;
             cout << "Server ip is set to " << server_ip << endl;
         }
-        else if (strcmp(command, "contDownloadFile") == 0)
-        {
-            char *file_name;
-            file_name = new char[FILE_NAME_MAX_SIZE];
-            cout << "Which file to continue download? ";
-            cin >> file_name;
-            int rc = pthread_create(&download_thread, NULL,
-                download_file, (void*)file_name);
-        }
+
         else
         {
             cout << "Usage:\n";
@@ -206,6 +196,7 @@ void analyze_download_file(char* torrent_file)
     long file_size;
     int num_piece;
     vector<string> hash_code;
+    vector<ip_struct> active_ip;
 
     if (read_torrent)
     {
@@ -246,6 +237,7 @@ void analyze_download_file(char* torrent_file)
     strcpy(peerlist, file_name);
     strcat(peerlist, ".peers");
     download_from_server(peerlist, tracker);
+    add_ip_from_peerlist(active_ip, peerlist);
 
     int loop_count = 0;
     //bool file_complete = true;
@@ -257,7 +249,7 @@ void analyze_download_file(char* torrent_file)
             {
                 continue;
             }
-            string ip = choose_peer(i, peerlist);
+            string ip = choose_peer(i, peerlist, active_ip);
 
             if ("" != ip)
             {
@@ -292,28 +284,26 @@ void analyze_download_file(char* torrent_file)
 
                     sendUpdate(file_name, tracker, update_piece_info(completion_record));
                 }
-            }
-           
+		else
+		  remove_ip(active_ip, ip);
+            }       
         }
-        loop_count ++;
-        if (loop_count > 30)
-        {   
-            //file_complete = false;
-            cout << "currently there is no more seeds availble for " << file_name << endl;
-            break;
-        }
+    	if (active_ip.empty()) {
+    	    cout << "currently there is no more seeds availble for " << file_name << endl;
+    	    break;
+    	}
     }
     if (completion_counts == num_piece)
     {
         if (combine_tmp(file_name,num_piece) <0)
         {
-            cout << "Combine piece file failed\n"; 
+            	cout << "Combine piece file failed\n"; 
         }
     }  
-    for (bool sta : completion_record)
-    {
-        cout << sta << endl;
-    }
+    //for (bool sta : completion_record)
+    //{
+       // cout << sta << endl;
+    //}
 }
 
 string update_piece_info(const vector<bool> &piece_record)
