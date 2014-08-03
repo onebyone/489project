@@ -1,6 +1,6 @@
 CC=g++
 FLAGS=-lpthread -std=c++11
-all: client
+all: run_client
 
 run_client:
 	rm -f ./client/client
