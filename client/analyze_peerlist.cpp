@@ -122,7 +122,7 @@ bool ifactive(vector<ip_struct> &active_ip, string ip)
 
 
 int generate_rand_array(int size, int* array){
-	for (int i=0;i<size;i++) array[i]=0;
+	for (int i=0;i<size;i++) array[i]=i;
 	srand((unsigned)time(NULL));
 	for (int i=0;i<size*size;i++) {
 		int j=rand()%size;
