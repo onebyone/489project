@@ -245,17 +245,16 @@ void analyze_download_file(char* torrent_file)
     {
         for (int i = 0; i <  num_piece; i++)
         {
-	    loop_count++;
             if (completion_record[i])
             {
                 continue;
             }
             string ip = choose_peer(i, peerlist, active_ip);
 
+	    loop_count++;
             if ("" != ip)
             {
                 cout << "ip is " << ip << endl;
-
                 long piece_size;
                 if (i == num_piece - 1)
                 {
