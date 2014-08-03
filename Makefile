@@ -1,15 +1,22 @@
 CC=g++
 FLAGS=-lpthread -std=c++11
-
 all: client
 
-client:
+run_client:
+	rm -f ./client/client
 	$(CC) ./client/*.cpp -o ./client/client $(FLAGS)
+	./client/client
 
-server:
+run_server:
+	rm -f ./server/server
 	$(CC) ./server/*.cpp -o ./server/server $(FLAGS)
+	./server/server
 
 clean:
 	rm -f ./client/client
+	rm -f ./client/torrent_list
 	rm -f ./server/server
+	rm -f ./server/*.peers
+	rm -f ./server/*.torrent
+	rm -f ./server/torrent_list
 
