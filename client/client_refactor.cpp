@@ -247,7 +247,7 @@ void analyze_download_file(char* torrent_file)
 	generate_rand_array(num_piece, array);
         for (int i = 0; i <  num_piece; i++)
         {
-            if (completion_record[i])
+            if (completion_record[array[i]])
             {
                 continue;
             }
@@ -282,7 +282,7 @@ void analyze_download_file(char* torrent_file)
                 if (request_download_piece(download_piece_info))
                 {
 	            completion_counts ++ ;
-                    completion_record[i] = true;
+                    completion_record[array[i]] = true;
 
                     sendUpdate(file_name, tracker, update_piece_info(completion_record));
                 }
