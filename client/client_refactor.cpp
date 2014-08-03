@@ -243,22 +243,24 @@ void analyze_download_file(char* torrent_file)
     //bool file_complete = true;
     while (completion_counts < num_piece)
     {
+	int* array= new int[num_piece];
+	generate_rand_array(num_piece, array);
         for (int i = 0; i <  num_piece; i++)
         {
             if (completion_record[i])
             {
                 continue;
             }
-            string ip = choose_peer(i, peerlist, active_ip);
+            string ip = choose_peer(array[i], peerlist, active_ip);
 
 	    loop_count++;
             if ("" != ip)
             {
                 cout << "ip is " << ip << endl;
                 long piece_size;
-                if (i == num_piece - 1)
+                if (array[i] == num_piece - 1)
                 {
-                    piece_size = file_size - i * PIECE_SIZE;
+                    piece_size = file_size - array[i] * PIECE_SIZE;
                 }
                 else
                 {
@@ -271,7 +273,7 @@ void analyze_download_file(char* torrent_file)
                 download_piece_info.file_name = file_name;
                 download_piece_info.port = 2080;
                 download_piece_info.piece_size = piece_size;
-                download_piece_info.piece_num = i;
+                download_piece_info.piece_num = array[i];
                 char ip_arr[20];
                 strcpy(ip_arr, ip.c_str());
                 download_piece_info.ip = ip_arr;
@@ -298,6 +300,7 @@ void analyze_download_file(char* torrent_file)
     	    cout << "currently there is no more seeds availble for " << file_name << endl;
     	    break;
     	}
+	delete [] array;
     }
     if (completion_counts == num_piece)
     {

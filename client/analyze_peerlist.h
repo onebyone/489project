@@ -4,6 +4,13 @@
 
 #include <string>
 #include <vector>
+#include <stdio.h>  
+#include <iostream>
+#include <string>
+#include <fstream>
+#include <vector>
+#include <cstdlib>
+#include <ctime>
 
 using namespace std;
 
@@ -21,5 +28,7 @@ bool ifactive(vector<ip_struct> &active_ip, string ip);
 void add_ip_from_peerlist(vector<ip_struct> &active_ip, char* peerlist_file);
 
 int remove_ip(vector<ip_struct> &active_ip, string ip);
+
+int generate_rand_array(int size, int* array);
 
 #endif
