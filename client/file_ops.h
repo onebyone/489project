@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <cstring>
 #include <iostream>
+#include <fstream>
 #include <dirent.h>
 
 using namespace std;
@@ -18,6 +19,7 @@ void gethash(unsigned char* input,char* hash);
 int create_torrent(char* file_name, char* tracker);
 int combine_tmp(const char* file_name, long piece_num);
 int verify_piece(char* torrent_addr, char* piece_addr, long piece_num);
+int verify_file(char* torrent_addr, char* file_addr);
 long get_file_size(char* file_name);
 Have_piece is_file_piece_exist(char* file_name, int piece_num = -1);
 int check_prev_download(vector<bool> &completion_record, int &completion_counts, char* file_name);

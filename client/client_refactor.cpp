@@ -280,7 +280,7 @@ void analyze_download_file(char* torrent_file)
 
                 if (request_download_piece(download_piece_info))
                 {
-                    completion_counts ++ ;
+	            completion_counts ++ ;
                     completion_record[i] = true;
 
                     sendUpdate(file_name, tracker, update_piece_info(completion_record));
@@ -289,7 +289,7 @@ void analyze_download_file(char* torrent_file)
 		  remove_ip(active_ip, ip);
             }
 
-            if (loop_count>20) {  
+            if (loop_count>19) {  
                 download_from_server(peerlist, tracker);
     		add_ip_from_peerlist(active_ip, peerlist);  
 		loop_count=0;
@@ -400,9 +400,9 @@ bool request_download_piece(const download_piece_info_t &download_info)
         char torrent_name[FILE_NAME_MAX_SIZE];
 
         sprintf(torrent_name,"%s.torrent",file_name);
-        if (0 != verify_piece(torrent_name, piece_name, piece_num))
+        if (!verify_piece(torrent_name, piece_name, piece_num))
         {
-            cout << "Error eccured in downloading piece " << piece_num << endl;
+            cout << "Error occured in downloading piece " << piece_num << endl;
             return false;
         }
         return true;

@@ -91,7 +91,7 @@ void add_ip_from_peerlist(vector<ip_struct> &active_ip, char* peerlist_file){
 		if (i==active_ip.size()) {
 			struct ip_struct entry;
 			entry.ip=ip;
-			entry.connect=5;
+			entry.connect=2;
 			active_ip.push_back(entry);
 		}
 	}
@@ -104,8 +104,9 @@ int remove_ip(vector<ip_struct> &active_ip, string ip)
 	while( active_ip.size() != i )
 	{
 		string tempip = active_ip[i].ip ;
-		if(tempip == ip) 
+		if(tempip == ip) {
 			return --active_ip[i].connect;
+		}
 		i++;
 	}
 	return 0;

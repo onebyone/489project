@@ -1,6 +1,6 @@
 #include "file_ops.h"
 
-#define pieceSize (4096*1024)
+#define PIECESIZE (4096*1024)
 
 using namespace std;
 
@@ -11,7 +11,7 @@ int combine_tmp(const char* file_name, long piece_num){
 	FILE* fd2;
 	long size;
 	char tmp_name[255];
-	char buff[pieceSize];
+	char buff[PIECESIZE];
 
 	fd1 = fopen(file_name,"wb");
 	if (fd1==NULL) 
@@ -37,7 +37,7 @@ int combine_tmp(const char* file_name, long piece_num){
 		
 		fclose(fd2);
 
-		remove(tmp_name);
+		//remove(tmp_name);
 	}
 
 	fclose(fd1);
@@ -49,7 +49,7 @@ int create_torrent(char* file_name, char* tracker_name)
 	FILE* fd;
 	FILE* ftorrent;
 	long size;
-	unsigned char buff[pieceSize];		
+	unsigned char buff[PIECESIZE];		
 
 	char torrent_name[256];
 	strcpy(torrent_name,file_name);
@@ -74,7 +74,7 @@ int create_torrent(char* file_name, char* tracker_name)
   	rewind (fd);
 
 
-	long part_num = size / pieceSize + (size % pieceSize != 0);
+	long part_num = size / PIECESIZE + (size % PIECESIZE != 0);
 
 	char size_str[256];
 	char part_str[256];
@@ -90,10 +90,10 @@ int create_torrent(char* file_name, char* tracker_name)
 
 
 	for (int i=0; i<part_num; i++) {
-		if (i==part_num-1 && (size % pieceSize))
-			fread (buff,1,size % pieceSize, fd);
+		if (i==part_num-1 && (size % PIECESIZE))
+			fread (buff,1,size % PIECESIZE, fd);
 		else
-			fread (buff,1, pieceSize,fd);
+			fread (buff,1, PIECESIZE,fd);
 		char hash[255];
 		gethash(buff,hash);
 		char hash_str[256];
@@ -113,7 +113,7 @@ int verify_piece(char* torrent_addr, char* piece_addr, long piece_num){
 	FILE* fd;
 	FILE* ftorrent;
 	long size;
-	unsigned char buff[pieceSize];
+	unsigned char buff[PIECESIZE];
 
 
 	// open both files
@@ -134,14 +134,14 @@ int verify_piece(char* torrent_addr, char* piece_addr, long piece_num){
 	// obtain file size
 	fseek (fd , 0 , SEEK_END);
   	size = ftell (fd);
-	if (size==pieceSize+1) size--;
+	if (size==PIECESIZE+1) size--;
   	rewind (fd);
 	
 	// verify hash code
 	char hash_c[255];
 	char hash_g[255];
 
-	for (int i=0; i<(piece_num+3);i++)
+	for (int i=0; i<(piece_num+4);i++)
 	 	fgets(hash_c, 255, ftorrent);
 	*strrchr(hash_c, '\n')='\0';
 	fread(buff, 1, size, fd);
@@ -151,6 +151,54 @@ int verify_piece(char* torrent_addr, char* piece_addr, long piece_num){
 	fclose(ftorrent);
 
 	return !strcmp(hash_c,hash_g);
+}
+
+int verify_file(char* torrent_addr, char* file_addr){
+	
+	FILE* fd;
+	FILE* ftorrent;
+	long size;
+	long piece_num;
+	unsigned char buff[PIECESIZE];
+
+	// open both files
+    	ifstream read_torrent(torrent_addr);
+	if(!read_torrent){
+		fputs ("File error\n",stderr); 
+		return -1;
+	}
+
+	fd = fopen(file_addr,"r");
+	if (fd==NULL) 
+	{
+		fputs ("File error\n",stderr); 
+		return -1;
+	}
+
+	// verify hash code
+	char hash_c[255];
+	char hash_g[255];
+
+	read_torrent>>hash_c>>size>>piece_num;
+	int i;
+	for (i=0; i<(piece_num)&& !feof(fd);i++) {
+	 	read_torrent>>hash_c;
+		if (i<piece_num-1)
+			fread(buff,1,PIECESIZE,fd);
+		else
+			fread(buff,1,size%PIECESIZE,fd);
+		gethash(buff,hash_g);
+		if (strcmp(hash_c,hash_g)){
+			fclose(fd);
+			read_torrent.close();
+			return 0;
+		}
+	}
+
+	
+	fclose(fd);
+	read_torrent.close();
+	return (i==piece_num);
 }
 
 long get_file_size(char* file_name)
@@ -237,7 +285,7 @@ int check_prev_download(vector<bool> &completion_record, int &completion_counts,
         	char* name = ent->d_name;
         	if (strcmp(name, file_name) == 0)
         	{
-        		return -1;
+        		if (verify_file(torrent_name, file_name)) return -1;
         	}
         	if (strlen(name) < file_name_len + 2)
         	{
