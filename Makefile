@@ -1,12 +1,12 @@
 CC=g++
 FLAGS=-lpthread -std=c++11
 
-all: g++_client g++_server g++_torrent	
+all: client
 
-g++_client:
+client:
 	$(CC) ./client/*.cpp -o ./client/client $(FLAGS)
 
-g++_server:
+server:
 	$(CC) ./server/*.cpp -o ./server/server $(FLAGS)
 
 clean:
