@@ -37,7 +37,7 @@ int combine_tmp(const char* file_name, long piece_num){
 		
 		fclose(fd2);
 
-		//remove(tmp_name);
+		remove(tmp_name);
 	}
 
 	fclose(fd1);
