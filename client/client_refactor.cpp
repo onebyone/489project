@@ -115,7 +115,7 @@ int main(int argc, char **argv){
         else
         {
             cout << "Usage:\n";
-            cout << "Available commands are quit, seed, sendTorrent, getTorrentList, downloadTorrent, downloadFile, contDownloadFile\n";
+            cout << "Available commands are quit, seed, sendTorrent, getTorrentList, downloadTorrent, downloadFile, changeServerIP\n";
 
         }
     }
