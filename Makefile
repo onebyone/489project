@@ -5,12 +5,12 @@ all: run_client
 run_client:
 	rm -f ./client/client
 	$(CC) ./client/*.cpp -o ./client/client $(FLAGS)
-	./client/client
+	cd ./client; ./client
 
 run_server:
 	rm -f ./server/server
 	$(CC) ./server/*.cpp -o ./server/server $(FLAGS)
-	./server/server
+	cd ./server; ./server
 
 clean:
 	rm -f ./client/client
